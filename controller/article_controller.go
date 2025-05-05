@@ -90,9 +90,10 @@ func (ac *ArticleController) CreateArticle(c *gin.Context) {
 			Content:    req.Content,
 			CategoryID: req.CategoryID,
 			// UserID:     uint(userIDInt),
-			Description: req.Description,
+			Description: req.Description, // 添加描述字段
 			UserID:      req.UserID,
 			UserName:    req.UserName,
+			Status:      "pending_review", // 显式设置初始状态
 		}
 		if err := tx.Create(&article).Error; err != nil {
 			return err
@@ -555,13 +556,13 @@ func (ac *ArticleController) PublishDraft(c *gin.Context) {
 	}
 	// 检查文章是否是草稿
 	if article.Status != model.ArticleStatusDraft {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Only draft articles can be published"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "只能发布草稿状态的文章"})
 		return
 	}
-	// 更新文章状态为已发布
+	// 更新文章为待审核
 	tx := DB.Begin()
-	article.Status = model.ArticleStatusPublished
-	article.PublishTime = time.Now()
+	article.Status = model.ArticleStatusPendingReview // 改为待审核状态
+	article.SubmitTime = time.Now()                   // 记录提交审核时间
 
 	if err := tx.Save(&article).Error; err != nil {
 		tx.Rollback()
@@ -679,3 +680,38 @@ func (ac *ArticleController) SaveDraft(c *gin.Context) {
 // // GetPublishedArticles 获取用户已发布的所有文章
 // func (ac *ArticleController) GetPublishedArticles(c *gin.Context) {
 // }
+
+// UpdatePublishStatus 更新文章发布状态
+func (ac *ArticleController) UpdatePublishStatus(c *gin.Context) {
+	id := c.Param("id")
+	var req struct {
+		StatusCode string `json:"status_code" binding:"required,oneof=published draft deleted pending_review rejected"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效状态码"})
+		return
+	}
+
+	statusMap := map[string]string{
+		"published":      model.ArticleStatusPublished,
+		"draft":          model.ArticleStatusDraft,
+		"deleted":        model.ArticleStatusDeleted,
+		"pending_review": model.ArticleStatusPendingReview,
+		"rejected":       model.ArticleStatusRejected,
+	}
+
+	validStatus, exists := statusMap[req.StatusCode]
+	if !exists {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效状态码"})
+		return
+	}
+
+	var article model.Article
+	if err := DB.Model(&article).Where("id = ?", id).Update("status", validStatus).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "状态更新失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "状态更新成功"})
+}

@@ -2,15 +2,16 @@ package pkg
 
 import (
 	"TraeCNServer/model"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
-"encoding/json"
-"regexp"
-	"golang.org/x/net/html"
+
 	"github.com/gocolly/colly"
 	"github.com/gocolly/colly/extensions"
+	"golang.org/x/net/html"
 )
 
 type Crawler2 struct {
@@ -135,15 +136,14 @@ func (c *Crawler2) searchJuejin(query string) ([]model.Article, error) {
 	return nil, nil
 }
 
-
 // SearchResult 定义一个腾讯云开发者社区的搜索结果的结构体
 type SearchResult struct {
 	SearchData struct {
 		List []struct {
-			ID    int    `json:"id"`
-			Title string `json:"title"`
-			Desc  string `json:"desc"`
-			ViewNum int    `json:"viewNum"`
+			ID          int    `json:"id"`
+			Title       string `json:"title"`
+			Desc        string `json:"desc"`
+			ViewNum     int    `json:"viewNum"`
 			CurrentTime string `json:"currentTime"`
 		} `json:"list"`
 	} `json:"searchData"`
@@ -151,15 +151,15 @@ type SearchResult struct {
 
 // 爬虫
 type demo struct {
-	Id    int    `json:"id"`
-	Title string `json:"title"`
-	Url   string `json:"url"`
-	Desc  string `json:"desc"`
-	ViewNum int    `json:"viewNum"`
+	Id          int    `json:"id"`
+	Title       string `json:"title"`
+	Url         string `json:"url"`
+	Desc        string `json:"desc"`
+	ViewNum     int    `json:"viewNum"`
 	CurrentTime string `json:"currentTime"`
 }
 
-func CrawlerTx(search string) ([]demo) {
+func CrawlerTx(search string) []demo {
 	// search := g.Query("search")
 	// if search == "" {
 	// 	g.JSON(400, gin.H{
@@ -204,11 +204,11 @@ func CrawlerTx(search string) ([]demo) {
 				if i < 6 {
 					fmt.Printf("ID: %d, Title: %s，Desc: %v，ViewNum: %v，Time:%v /n", item.ID, item.Title, item.Desc, item.ViewNum, item.CurrentTime)
 					demo1 := demo{
-						Id:    item.ID,
-						Title: item.Title,
-						Url:   fmt.Sprintf("https://cloud.tencent.com/developer/article/%d", item.ID),
-						Desc:  item.Desc,
-						ViewNum: item.ViewNum,
+						Id:          item.ID,
+						Title:       item.Title,
+						Url:         fmt.Sprintf("https://cloud.tencent.com/developer/article/%d", item.ID),
+						Desc:        item.Desc,
+						ViewNum:     item.ViewNum,
 						CurrentTime: item.CurrentTime,
 					}
 					data = append(data, demo1)
@@ -226,7 +226,7 @@ func CrawlerTx(search string) ([]demo) {
 	})
 
 	c.Visit("https://cloud.tencent.com/developer/search/article-" + search)
-    
+
 	c.Wait()
 	fmt.Println(data) // 打印结果，你可以根据需要进行处理或返回给客户端
 	return data

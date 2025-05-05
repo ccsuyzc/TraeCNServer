@@ -40,6 +40,7 @@ func SetupApiRoutes(r *gin.RouterGroup, hub *controller.MessageHub) {
 		articlesGroup.GET("/category/:id/limit", articleCtrl.GetArticlesByCategoryAndLimit)   // 按分类和条数获取文章
 		articlesGroup.PUT("/:id", articleCtrl.UpdateArticle)                                  // 更新文章
 		articlesGroup.DELETE("/:id", articleCtrl.DeleteArticle)                               // 删除文章
+		articlesGroup.PUT("/publish-status/:id", articleCtrl.UpdatePublishStatus)             // 更新文章发布状态 管理员操作
 		articlesGroup.POST("/drafts", articleCtrl.SaveDraft)                                  // 保存草稿
 		articlesGroup.GET("/draft/:userid", articleCtrl.GetDrafts)                            // 获取用户所有草稿
 		articlesGroup.GET("/draft/:userid/:draftid", articleCtrl.GetDraft)                    // 获取用户的单个文章草稿
@@ -59,7 +60,7 @@ func SetupApiRoutes(r *gin.RouterGroup, hub *controller.MessageHub) {
 
 	r.POST("/users/:Originaluser/follow/:targetId", userCtrl.FollowUser)        // 关注用户
 	r.DELETE("/users/:Originaluser/notfollow/:targetId", userCtrl.UnfollowUser) // 取消关注
-	r.GET("/usersfollowing/:targetId", userCtrl.GetFollowingList)              // 获取用户关注列表
+	r.GET("/usersfollowing/:targetId", userCtrl.GetFollowingList)               // 获取用户关注列表
 	r.GET("/users/mutual-follow", userCtrl.CheckMutualFollow)                   // 验证双向关注关系
 
 	r.POST("/register", userCtrl.Register)                  // 保留旧注册方式

@@ -20,18 +20,17 @@ func (sc *SearchController) SearchArticles(c *gin.Context) {
 
 	// 本地数据库查询
 	var localArticles []model.Article
-	db := DB.Where("title LIKE ?", "%"+query+"%")  // 模糊查询 
+	db := DB.Where("title LIKE ?", "%"+query+"%") // 模糊查询
 	db.Offset((page - 1) * pageSize).Limit(pageSize).Find(&localArticles)
 
 	// 调用爬虫获取外部结果
 	// cr := pkg.crawler.NewCrawler()
 	// externalArticles, _ := cr.SearchArticles(query)
-	externalArticles:= pkg.CrawlerTx(query)
+	externalArticles := pkg.CrawlerTx(query)
 
 	c.JSON(http.StatusOK, gin.H{
 		"local":    localArticles,
 		"external": externalArticles,
-		
 	})
 }
 

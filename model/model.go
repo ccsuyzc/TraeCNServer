@@ -78,8 +78,11 @@ type User struct {
 // 文章表 - 存储博客文章内容
 // 包含文章元数据、内容和关联关系
 const (
-	ArticleStatusPublished = "published"
-	ArticleStatusDraft     = "draft"
+	ArticleStatusPublished     = "published"      // 已发布
+	ArticleStatusDraft         = "draft"          // 草稿
+	ArticleStatusDeleted       = "deleted"        // 已删除
+	ArticleStatusPendingReview = "pending_review" // 审核中
+	ArticleStatusRejected      = "rejected"       // 驳回
 )
 
 type Article struct {
@@ -93,6 +96,7 @@ type Article struct {
 	Content      string    `gorm:"type:longtext;not null"` // 文章内容
 	PublishTime  time.Time `gorm:"index"`                  // 发布时间
 	UpdateTime   time.Time // 更新时间
+	SubmitTime   time.Time // 审核时间
 	IsDeleted    bool      `gorm:"default:false"`            // 是否删除
 	Status       string    `gorm:"size:20;default:'draft'"`  // 文章状态 draft为草稿，published为发布，Review为审核中，Rejected为审核未通过
 	IsTop        bool      `gorm:"default:false"`            // 是否置顶
@@ -281,8 +285,8 @@ type UserGroup struct {
 
 // 用户关注关系表
 type UserFollow struct {
-	FollowerID uint      `gorm:"primaryKey;autoIncrement:false"`   // 关注者ID
-	FollowedID uint      `gorm:"primaryKey;autoIncrement:false"`   // 被关注者ID
+	FollowerID uint      `gorm:"primaryKey;autoIncrement:false"` // 关注者ID
+	FollowedID uint      `gorm:"primaryKey;autoIncrement:false"` // 被关注者ID
 	CreatedAt  time.Time // 关注时间
 
 	Follower User `gorm:"foreignKey:FollowerID"`
@@ -420,8 +424,9 @@ func (uf *UserFollow) AfterDelete(tx *gorm.DB) error {
 func (u *User) Follow(db *gorm.DB, userID uint) error {
 	return db.Create(&UserFollow{FollowerID: u.ID, FollowedID: userID}).Error
 }
+
 // 下面这个是无需验证的版本
-func  FollowY(db *gorm.DB, userID1,uerID2 uint) error {
+func FollowY(db *gorm.DB, userID1, uerID2 uint) error {
 	return db.Create(&UserFollow{FollowerID: userID1, FollowedID: uerID2}).Error
 }
 
@@ -429,8 +434,9 @@ func  FollowY(db *gorm.DB, userID1,uerID2 uint) error {
 func (u *User) Unfollow(db *gorm.DB, userID uint) error {
 	return db.Where("follower_id = ? AND followed_id = ?", u.ID, userID).Delete(&UserFollow{}).Error
 }
+
 // 无需验证的取消关注的方法
-func  UnfollowY(db *gorm.DB, userID1,userID2 uint) error {
+func UnfollowY(db *gorm.DB, userID1, userID2 uint) error {
 	return db.Where("follower_id = ? AND followed_id = ?", userID1, userID2).Delete(&UserFollow{}).Error
 }
 
