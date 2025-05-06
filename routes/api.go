@@ -9,6 +9,7 @@ import (
 )
 
 func SetupApiRoutes(r *gin.RouterGroup, hub *controller.MessageHub) {
+
 	// 私信路由
 	messageCtrl := controller.MessageController{Hub: hub}
 	messageGroup := r.Group("/messages")
@@ -63,13 +64,17 @@ func SetupApiRoutes(r *gin.RouterGroup, hub *controller.MessageHub) {
 	r.GET("/usersfollowing/:targetId", userCtrl.GetFollowingList)               // 获取用户关注列表
 	r.GET("/users/mutual-follow", userCtrl.CheckMutualFollow)                   // 验证双向关注关系
 
-	r.POST("/register", userCtrl.Register)                  // 保留旧注册方式
-	r.POST("/login", userCtrl.Login)                        // 账号密码登录
-	r.POST("/loginE", userCtrl.LoginE)                      // 邮件密码登录
-	r.GET("/users/:id", userCtrl.GetUserProfile)            // 获取用户信息
-	r.PUT("/users/:id", userCtrl.UpdateUserProfile)         // 更新用户信息
-	r.POST("/auth/sendcode", userCtrl.SendVerificationCode) // 发送验证码
-	r.POST("/auth/verifyregister", userCtrl.VerifyAndRegister)
+	r.POST("/register", userCtrl.Register)                     // 保留旧注册方式
+	r.POST("/login", userCtrl.Login)                           // 账号密码登录
+	r.POST("/loginE", userCtrl.LoginE)                         // 邮件密码登录
+	r.GET("/users/:id", userCtrl.GetUserProfile)               // 获取用户信息
+	r.PUT("/users/:id", userCtrl.UpdateUserProfile)            // 更新用户信息
+	r.POST("/auth/sendcode", userCtrl.SendVerificationCode)    // 发送验证码
+	r.POST("/auth/verifyregister", userCtrl.VerifyAndRegister) // 验证验证码并注册
+
+	// 用户行为记录路由
+	r.POST("/search-history", controller.CreateSearchHistory)
+	r.POST("/reading-history", controller.CreateReadingHistory)
 
 	// 搜索路由
 	r.GET("/search/users", userCtrl.SearchUsers)

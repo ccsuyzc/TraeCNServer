@@ -526,14 +526,17 @@ func AutoMigrate(db *gorm.DB) error {
 		&AdminLog{},          // 管理员日志表
 		&GroupApply{},        // 圈子申请表
 
-		&Problem{},
-		&TestCase{},
-		&Submission{},
-		&ProblemTag{},
-		&UserProblemStatus{},
+		&Problem{},           // 题目表
+		&TestCase{},          // 测试用例表
+		&Submission{},        // 提交表
+		&ProblemTag{},        // 题目标签表
+		&UserProblemStatus{}, // 用户题目状态表
 
-		&Message{},
-		&UserFollow{},
+		&Message{},    // 消息表
+		&UserFollow{}, // 用户关注表
+
+		&SearchHistory{},  // 搜索历史表
+		&ReadingHistory{}, // 阅读历史表
 	)
 }
 
