@@ -214,7 +214,7 @@ type Like struct {
 // 收藏表 - 记录用户收藏的文章
 // 用于个人收藏管理
 type Favorite struct {
-	ID           uint      `gorm:"primaryKey"`     // 收藏ID
+   gorm.Model
 	UserID       uint      `gorm:"index;not null"` // 用户ID
 	ArticleID    uint      `gorm:"index;not null"` // 文章ID
 	FavoriteTime time.Time // 收藏时间
@@ -223,33 +223,7 @@ type Favorite struct {
 	Article Article `gorm:"foreignKey:ArticleID"` // 关联文章
 }
 
-// AI问答会话表 - 存储用户与AI的对话记录
-// 包含问题、回答和token使用统计
-type AIConversation struct {
-	ID           uint      `gorm:"primaryKey"`             // 会话ID
-	UserID       uint      `gorm:"index;not null"`         // 用户ID
-	SessionID    string    `gorm:"size:64;index"`          // 会话ID
-	Question     string    `gorm:"type:longtext;not null"` // 问题
-	Answer       string    `gorm:"type:longtext;not null"` // 回答
-	Model        string    `gorm:"size:50;not null"`       // 使用的模型
-	InputTokens  int       `gorm:"not null"`               // 输入的token数量
-	OutputTokens int       `gorm:"not null"`               // 输出的token数量
-	TotalTokens  int       `gorm:"index;not null"`         // 总token数量
-	CreatedTime  time.Time // 创建时间
 
-	User User `gorm:"foreignKey:UserID"` // 关联用户
-}
-
-// AI使用统计表 - 按月记录用户AI使用情况
-// 包含token消耗和API调用次数
-type AIUsageStatistics struct {
-	ID          uint      `gorm:"primaryKey"`
-	UserID      uint      `gorm:"uniqueIndex:uidx_user_month;not null"`
-	Month       string    `gorm:"uniqueIndex:uidx_user_month;type:char(7);not null"`
-	TotalTokens int       `gorm:"not null"`
-	APICalls    int       `gorm:"not null"`
-	LastUpdate  time.Time // 最后更新时间
-}
 
 // 群组表 - 存储用户创建的群组
 type Group struct {
@@ -350,8 +324,6 @@ type Submission struct {
 	PassedCases   int    `gorm:"default:0"`                       // 通过用例数
 	TotalCases    int    `gorm:"default:0"`                       // 总用例数
 	ErrorMessage  string `gorm:"type:text"`                       // 错误信息
-	IsContest     bool   `gorm:"default:false"`                   // 是否比赛提交
-
 	User    User    `gorm:"foreignKey:UserID"`    // 关联用户
 	Problem Problem `gorm:"foreignKey:ProblemID"` // 关联题目
 }

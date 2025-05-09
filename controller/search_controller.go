@@ -4,8 +4,10 @@ import (
 	. "TraeCNServer/db"
 	"TraeCNServer/model"
 	"TraeCNServer/pkg"
+	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -15,6 +17,27 @@ type SearchController struct{}
 // SearchArticles 文章搜索
 func (sc *SearchController) SearchArticles(c *gin.Context) {
 	query := c.Query("q")
+	userID := c.Query("userid")
+	// 仅当userID非空时处理
+	if userID != "" {
+		// 转换用户ID
+		userIDUint, err := strconv.ParseUint(userID, 10, 32)
+		if err != nil {
+			log.Printf("用户ID转换错误: %v", err)
+		}
+
+		// 保存搜索历史（仅在转换成功时）
+		if err == nil {
+			history := model.SearchHistory{
+				UserID:        uint(userIDUint),
+				SearchContent: query,
+				Timestamp:     time.Now(),
+			}
+			if err := DB.Create(&history).Error; err != nil {
+				log.Printf("搜索历史保存失败: %v", err)
+			}
+		}
+	}
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
 
@@ -29,6 +52,8 @@ func (sc *SearchController) SearchArticles(c *gin.Context) {
 	externalArticles := pkg.CrawlerTx(query)
 
 	c.JSON(http.StatusOK, gin.H{
+		"msg":      "查询成功",
+		"code":     200,
 		"local":    localArticles,
 		"external": externalArticles,
 	})
@@ -57,6 +82,8 @@ func (sc *SearchController) SearchByTag(c *gin.Context) {
 				"total":        total,
 				"current_page": page,
 				"per_page":     pageSize,
+				"mag":          "查询成功",
+				"code":         200,
 			},
 		},
 	})

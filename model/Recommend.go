@@ -12,8 +12,6 @@ type SearchHistory struct {
     SearchContent string   `gorm:"type:text;not null"`
     Timestamp    time.Time `gorm:"index"`
     User         User      `gorm:"foreignKey:UserID"`
-
-
 }
     // 创建前验证用户存在
     func (s *SearchHistory) BeforeCreate(tx *gorm.DB) error {
@@ -27,14 +25,12 @@ type SearchHistory struct {
 // 用户阅读记录模型 
 type ReadingHistory struct {
     gorm.Model
-    UserID      uint      `gorm:"index;not null"`
-    ArticleID   uint      `gorm:"index;not null"`
-    Duration    int       `gorm:"default:0"`
-    Timestamp   time.Time `gorm:"index"`
-    User        User      `gorm:"foreignKey:UserID"`
-    Article     Article   `gorm:"foreignKey:ArticleID"`
-
-
+    UserID      uint      `gorm:"index;not null" json:"user_id"`  // 用户ID
+    ArticleID   uint      `gorm:"index;not null" json:"article_id"`  // 文章ID
+    Duration    int       `gorm:"default:0" json:"duration"`       // 阅读时长（秒）
+    Timestamp   time.Time `gorm:"index"`           // 阅读时间
+    User        User      `gorm:"foreignKey:UserID"`  // 关联用户
+    Article     Article   `gorm:"foreignKey:ArticleID"` // 关联文章
 }
 
     // 创建前验证用户和文章存在
@@ -47,6 +43,14 @@ type ReadingHistory struct {
         var article Article
         if result := tx.First(&article, r.ArticleID); result.Error != nil {
             return fmt.Errorf("文章ID %d 不存在", r.ArticleID)
+        }
+        return nil
+    }
+
+    // 自动创建时间
+    func (r *ReadingHistory) BeforeSave(tx *gorm.DB) error {
+        if r.Timestamp.IsZero() {
+            r.Timestamp = time.Now()
         }
         return nil
     }

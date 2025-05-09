@@ -103,6 +103,7 @@ func (uc *UserController) VerifyAndRegister(c *gin.Context) {
 	RedisClient.Del(c, "verification:"+req.Email)
 	token, _ := middleware.GenerateToken(user.Username)
 	c.JSON(http.StatusCreated, gin.H{
+		"code":     200,
 		"message":  "注册成功",
 		"username": user.Username,
 		// "password": user.Password,
@@ -140,7 +141,7 @@ func (uc *UserController) Register(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{"message": "User registered successfully", "data": user, "token": token})
+	c.JSON(http.StatusCreated, gin.H{"message": "User registered successfully", "data": user, "token": token, "code": 200})
 }
 
 // Login 用户登录
@@ -158,11 +159,14 @@ func (uc *UserController) Login(c *gin.Context) {
 	if err := DB.Where("username = ?", req.Username).First(&user).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username or password"})
+			return
 		}
+		return
 	}
 	// 验证密码
 	if user.PasswordHash != req.Password {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username or password"})
+		return
 	}
 	// 生成JWT token
 	token, err := middleware.GenerateToken(user.Username)
@@ -172,7 +176,7 @@ func (uc *UserController) Login(c *gin.Context) {
 	}
 	// 更新最后登录时间
 	DB.Model(&user).Update("last_login_time", time.Now())
-	c.JSON(http.StatusOK, gin.H{"message": "User logged in successfully", "data": user, "token": token})
+	c.JSON(http.StatusOK, gin.H{"message": "User logged in successfully", "data": user, "token": token, "code": 200})
 }
 
 // LoginE 用户邮件密码登录
@@ -223,6 +227,44 @@ func (uc *UserController) LoginE(c *gin.Context) {
 		"data":    user,
 		"token":   token,
 	})
+}
+
+// 邮件验证码登录
+func (uc *UserController) LoginEW(c *gin.Context) {
+
+	var req struct {
+		Email string `json:"email" binding:"required,email"`
+		Code  string `json:"code" binding:"required,len=6"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(),"msg":"数据传输有误","code":400})
+		return
+	}
+	
+	// 检查验证码是否有效
+	storedCode, err := RedisClient.Get(c, "verification:"+req.Email).Result() // 检查验证码是否有效
+	if err != nil || storedCode != req.Code { // 检查验证码是否有效
+		c.JSON(http.StatusBadRequest, gin.H{"error": "验证码无效或已过期","code":400})
+		return
+	}
+
+
+	var user model.User
+	if err := DB.Where("email = ?", req.Email).First(&user).Error; err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "邮箱未注册","code":400})
+		return
+	}
+
+	RedisClient.Del(c, "verification:"+req.Email)
+	token, _ := middleware.GenerateToken(user.Username)
+	c.JSON(http.StatusCreated, gin.H{
+		"message":  "登录成功",
+		// "password": user.Password,
+		"data":   user,
+		"token": token,
+		"code": 200,
+	})
+
 }
 
 // GetUserProfile 获取用户资料
@@ -565,7 +607,7 @@ func AdminLogin(c *gin.Context) {
 		"user":  filterAdminUserInfo(user),
 	})
 }
-
+// 这是一个辅助函数，用于过滤用户信息
 func filterAdminUserInfo(user *model.User) interface{} {
 	return struct {
 		ID        uint   `json:"id"`
@@ -582,4 +624,14 @@ func filterAdminUserInfo(user *model.User) interface{} {
 	}
 }
 
-// ... existing code ...
+// 获取所有用户
+func (uc *UserController) GetAllUsers(c *gin.Context) {
+	var users []model.User
+	if result := DB.Find(&users); result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error(),"msg":"查询失败","code":400})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"msg": "查询成功", "data": users, "code": 200})
+}
+
+

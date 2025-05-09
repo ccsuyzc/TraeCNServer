@@ -3,6 +3,7 @@ package controller
 import (
 	. "TraeCNServer/db"
 	"TraeCNServer/model"
+	"TraeCNServer/service/redis_service"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -18,6 +19,115 @@ import (
 
 // ArticleController 文章控制器
 type ArticleController struct{}
+
+// LikeArticle 点赞文章
+func (ac *ArticleController) LikeArticle(c *gin.Context) {
+	var req struct {
+		ArticleID uint `json:"article_id" binding:"required"`
+		UserID    uint `json:"user_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := redis_service.LikeArticle(c.Request.Context(), req.ArticleID, req.UserID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "点赞操作失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "点赞成功"})
+}
+
+// UnlikeArticle 取消点赞
+func (ac *ArticleController) UnlikeArticle(c *gin.Context) {
+	var req struct {
+		ArticleID uint `json:"article_id" binding:"required"`
+		UserID    uint `json:"user_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := redis_service.UnlikeArticle(c.Request.Context(), req.ArticleID, req.UserID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "取消点赞失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "已取消点赞"})
+}
+
+// GetArticleLikes 获取文章点赞数
+func (ac *ArticleController) GetArticleLikes(c *gin.Context) {
+	articleID, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+	count, err := redis_service.GetArticleLikes(c.Request.Context(), uint(articleID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取点赞数失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"count": count})
+}
+
+// FavoriteArticle 收藏文章
+func (ac *ArticleController) FavoriteArticle(c *gin.Context) {
+	var param struct {
+		UserID    uint `json:"user_id" binding:"required"`
+		ArticleID uint `json:"article_id" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&param); err != nil {
+		c.JSON(400, gin.H{"error": err.Error(),"code": 400})
+		return
+	}
+
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&model.Favorite{UserID: param.UserID, ArticleID: param.ArticleID}).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&model.Article{}).Where("id = ?", param.ArticleID).Update("favorite_count", gorm.Expr("favorite_count + 1")).Error; err != nil {
+			return err
+		}
+		return nil
+	})
+
+	if err != nil {
+		c.JSON(500, gin.H{"error": "收藏失败","code": 500})
+		return
+	}
+
+	c.JSON(200, gin.H{"message": "收藏成功","code": 200})
+}
+
+// UnfavoriteArticle 取消收藏
+func (ac *ArticleController) UnfavoriteArticle(c *gin.Context) {
+	var param struct {
+		UserID    uint `json:"user_id" binding:"required"`
+		ArticleID uint `json:"article_id" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&param); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("user_id = ? AND article_id = ?", param.UserID, param.ArticleID).Delete(&model.Favorite{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&model.Article{}).Where("id = ?", param.ArticleID).Update("favorite_count", gorm.Expr("favorite_count - 1")).Error; err != nil {
+			return err
+		}
+		return nil
+	})
+
+	if err != nil {
+		c.JSON(500, gin.H{"error": "取消收藏失败"})
+		return
+	}
+
+	c.JSON(200, gin.H{"message": "取消收藏成功"})
+}
 
 // Paginate 分页作用域函数
 func Paginate(page, pageSize int) func(db *gorm.DB) *gorm.DB {
@@ -93,7 +203,7 @@ func (ac *ArticleController) CreateArticle(c *gin.Context) {
 			Description: req.Description, // 添加描述字段
 			UserID:      req.UserID,
 			UserName:    req.UserName,
-			Status:      "pending_review", // 显式设置初始状态
+			Status:      "pending_review", // 显式设置初始状态为审核中
 		}
 		if err := tx.Create(&article).Error; err != nil {
 			return err
@@ -113,7 +223,7 @@ func (ac *ArticleController) CreateArticle(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"message": "文章创建成功"})
+	c.JSON(http.StatusCreated, gin.H{"message": "文章创建成功", "code": 200, "data": req})
 }
 
 // GetArticle 获取单篇文章
@@ -173,6 +283,25 @@ func (ac *ArticleController) GetAllArticles(c *gin.Context) {
 		"data":  articles,
 		"page":  page,
 		"total": total,
+	})
+}
+
+// GetAllPublishedArticles 获取所有已发布文章
+func (ac *ArticleController) GetAllPublishedArticles(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
+
+	var articles []model.Article
+	DB.Where("status = ?", "published").
+		Joins("User").
+		Offset((page - 1) * pageSize).
+		Limit(pageSize).
+		Find(&articles)
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 200,
+		"data": articles,
+		"msg":  "获取全部已发布文章成功",
 	})
 }
 
@@ -367,7 +496,7 @@ func (ctrl *ArticleController) GetArticlesByCategory(c *gin.Context) {
 		c.JSON(500, gin.H{"error": "查询失败"})
 		return
 	}
-	c.JSON(200, gin.H{"data": articles})
+	c.JSON(200, gin.H{"data": articles, "code": 200, "msg": "查询成功"})
 }
 
 // GetArticlesByCategoryAndLimit 按分类和条数获取文章
@@ -684,34 +813,262 @@ func (ac *ArticleController) SaveDraft(c *gin.Context) {
 // UpdatePublishStatus 更新文章发布状态
 func (ac *ArticleController) UpdatePublishStatus(c *gin.Context) {
 	id := c.Param("id")
+	// var req struct {
+	// 	StatusCode string `json:"status_code" binding:"required,oneof=published draft deleted pending_review rejected"`
+	// }
+
+	// if err := c.ShouldBindJSON(&req); err != nil {
+	// 	c.JSON(http.StatusBadRequest, gin.H{"error": "无效状态码"})
+	// 	return
+	// }
+
+	// statusMap := map[string]string{
+	// 	"published":      model.ArticleStatusPublished,
+	// 	"draft":          model.ArticleStatusDraft,
+	// 	"deleted":        model.ArticleStatusDeleted,
+	// 	"pending_review": model.ArticleStatusPendingReview,
+	// 	"rejected":       model.ArticleStatusRejected,
+	// }
+
+	// validStatus, exists := statusMap[req.StatusCode]
+	// if !exists {
+	// 	c.JSON(http.StatusBadRequest, gin.H{"error": "无效状态码"})
+	// 	return
+	// }
+
+	var article model.Article
+	if err := DB.Model(&article).Where("id = ?", id).Update("status", model.ArticleStatusPublished).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "状态更新失败", "code": 400})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "状态更新成功", "code": 200})
+}
+
+// 获取待审核文章
+func (ctrl *ArticleController) GetPendingArticles(c *gin.Context) {
+	var articles []model.Article
+	if result := DB.Where("status = ?", "pending_review").Find(&articles); result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": articles, "code": 200, "msg": "获取待审核文章成功"})
+}
+
+// 拒绝文章
+func (ctrl *ArticleController) RejectArticle(c *gin.Context) {
+	// 解析请求参数
 	var req struct {
-		StatusCode string `json:"status_code" binding:"required,oneof=published draft deleted pending_review rejected"`
+		ArticleID    uint   `json:"article_id" binding:"required"`
+		UserID       uint   `json:"user_id" binding:"required"`
+		RejectReason string `json:"reject_reason" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "code": 400})
+		return
+	}
+
+	tx := DB.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// 更新文章审核信息
+	updateData := map[string]interface{}{
+		"status":        "rejected",
+		"auditor_id":    req.UserID,
+		"reject_reason": req.RejectReason,
+		"audit_time":    time.Now(),
+		"audit_status":  "rejected",
+	}
+
+	if err := tx.Model(&model.Article{}).Where("id = ?", req.ArticleID).Updates(updateData).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error(), "code": 400})
+		return
+	}
+
+	// 记录管理员日志
+	adminLog := model.AdminLog{
+		AdminID:     req.UserID,
+		TargetType:  "article",
+		TargetID:    req.ArticleID,
+		Action:      "reject",
+		Description: fmt.Sprintf("驳回文章ID %d，原因：%s", req.ArticleID, req.RejectReason),
+		IPAddress:   c.ClientIP(),
+	}
+
+	if err := tx.Create(&adminLog).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error(), "code": 400})
+		return
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error(), "code": 400})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "文章驳回操作已完成", "code": 200})
+}
+
+// 获取指定用户的全部已发布或审核中或已拒绝文章
+func (ac *ArticleController) GetUserAllArticle(c *gin.Context) {
+	// 验证用户ID参数
+	userID, err := strconv.Atoi(c.Param("userid"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的用户ID"})
+		return
+	}
+
+	// 获取分页参数
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
+
+	// 定义响应结构体
+	type categorizedArticles struct {
+		Published     []model.Article `json:"published"`
+		PendingReview []model.Article `json:"pending_review"`
+		Rejected      []model.Article `json:"rejected"`
+		Pagination    gin.H           `json:"pagination"`
+	}
+
+	var result categorizedArticles
+	var total int64
+
+	// 查询各状态文章
+	db := DB.Where("user_id = ?", userID)
+
+	// 已发布文章
+	if err := db.Where("status = ?", "published").
+		Preload("Category").Preload("Tags").
+		Order("created_at desc").
+		Limit(pageSize).Offset((page - 1) * pageSize).
+		Find(&result.Published).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
+		return
+	}
+
+	// 审核中文章
+	if err := db.Where("status = ?", "pending_review").
+		Preload("Category").Preload("Tags").
+		Order("created_at desc").
+		Limit(pageSize).Offset((page - 1) * pageSize).
+		Find(&result.PendingReview).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
+		return
+	}
+
+	// 已拒绝文章
+	if err := db.Where("status = ?", "rejected").
+		Preload("Category").Preload("Tags").
+		Order("created_at desc").
+		Limit(pageSize).Offset((page - 1) * pageSize).
+		Find(&result.Rejected).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
+		return
+	}
+
+	// 获取总条数
+	DB.Model(&model.Article{}).Where("user_id = ?", userID).Count(&total)
+
+	// 设置分页信息
+	result.Pagination = gin.H{
+		"currentPage": page,
+		"pageSize":    pageSize,
+		"total":       total,
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data":    result,
+		"success": true,
+		"message": "查询成功",
+	})
+}
+
+// 点赞文章
+func (ctrl *ArticleController) Like(c *gin.Context) {
+	var like model.Like
+	if err := c.ShouldBindJSON(&like); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		// 检查是否已点赞
+		var existingLike model.Like
+		if err := tx.Where("user_id = ? AND article_id = ?", like.UserID, like.ArticleID).First(&existingLike).Error; err == nil {
+			return fmt.Errorf("already liked")
+		}
+
+		// 创建点赞记录
+		if err := tx.Create(&like).Error; err != nil {
+			return err
+		}
+
+		// 更新文章点赞数
+		if err := tx.Model(&model.Article{}).Where("id = ?", like.ArticleID).
+			Update("like_count", gorm.Expr("like_count + 1")).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, gin.H{"message": "liked successfully"})
+}
+
+// 取消点赞
+func (ctrl *ArticleController) Unlike(c *gin.Context) {
+	var req struct {
+		UserID    uint `json:"user_id"`
+		ArticleID uint `json:"article_id"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效状态码"})
+		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
 
-	statusMap := map[string]string{
-		"published":      model.ArticleStatusPublished,
-		"draft":          model.ArticleStatusDraft,
-		"deleted":        model.ArticleStatusDeleted,
-		"pending_review": model.ArticleStatusPendingReview,
-		"rejected":       model.ArticleStatusRejected,
-	}
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		// 查找并删除点赞记录
+		if err := tx.Where("user_id = ? AND article_id = ?", req.UserID, req.ArticleID).
+			Delete(&model.Like{}).Error; err != nil {
+			return err
+		}
 
-	validStatus, exists := statusMap[req.StatusCode]
-	if !exists {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效状态码"})
+		// 更新文章点赞数
+		if err := tx.Model(&model.Article{}).Where("id = ?", req.ArticleID).
+			Update("like_count", gorm.Expr("like_count - 1")).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		c.JSON(400, gin.H{"error": "like record not found"})
 		return
 	}
 
-	var article model.Article
-	if err := DB.Model(&article).Where("id = ?", id).Update("status", validStatus).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "状态更新失败"})
-		return
-	}
+	c.JSON(200, gin.H{"message": "unliked successfully"})
+}
 
-	c.JSON(http.StatusOK, gin.H{"message": "状态更新成功"})
+// 验证文章和用户的收藏关系
+func (ctrl *ArticleController) CheckFavoriteStatus(c *gin.Context) {
+	userID, _ := strconv.Atoi(c.Param("userid"))
+	articleID, _ := strconv.Atoi(c.Param("articleid"))
+
+	var favorite model.Favorite
+	if err := DB.Where("user_id =? AND article_id =?", userID, articleID).First(&favorite).Error; err!= nil {
+		c.JSON(http.StatusOK, gin.H{"message": "未收藏", "is_favorite": false})
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "该用户收藏了该文章", "is_favorite": true})
 }
