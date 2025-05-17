@@ -1,7 +1,7 @@
 package config
 
 import (
-	. "TraeCNServer/model"
+	 . "TraeCNServer/model"
 	"fmt"
 
 	"gorm.io/driver/mysql"

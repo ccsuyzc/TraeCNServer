@@ -20,7 +20,7 @@ func (ctrl *ImageController) UploadImage(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 5<<20)
 
 	// 2. 获取上传文件
-	file, err := c.FormFile("image")  // 假设前端表单字段名为"image"
+	file, err := c.FormFile("image") // 假设前端表单字段名为"image"
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "请选择要上传的图片"})
 		return
@@ -54,4 +54,22 @@ func (ctrl *ImageController) UploadImage(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"url": fmt.Sprintf("/images/%s", newFilename),
 	})
+}
+
+func (ctrl *ImageController) DeleteImage(c *gin.Context) {
+	filename := c.Query("filename")
+	if filename == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少文件名参数"})
+		return
+	}
+	filePath := filepath.Join("./uploads/images", filename)
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "文件不存在"})
+		return
+	}
+	if err := os.Remove(filePath); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
 }

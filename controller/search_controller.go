@@ -18,15 +18,11 @@ type SearchController struct{}
 func (sc *SearchController) SearchArticles(c *gin.Context) {
 	query := c.Query("q")
 	userID := c.Query("userid")
-	// 仅当userID非空时处理
 	if userID != "" {
-		// 转换用户ID
 		userIDUint, err := strconv.ParseUint(userID, 10, 32)
 		if err != nil {
 			log.Printf("用户ID转换错误: %v", err)
 		}
-
-		// 保存搜索历史（仅在转换成功时）
 		if err == nil {
 			history := model.SearchHistory{
 				UserID:        uint(userIDUint),
@@ -41,15 +37,33 @@ func (sc *SearchController) SearchArticles(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
 
-	// 本地数据库查询
-	var localArticles []model.Article
-	db := DB.Where("title LIKE ?", "%"+query+"%") // 模糊查询
-	db.Offset((page - 1) * pageSize).Limit(pageSize).Find(&localArticles)
+	localCh := make(chan []model.Article)
+	externalCh := make(chan interface{})
 
-	// 调用爬虫获取外部结果
-	// cr := pkg.crawler.NewCrawler()
-	// externalArticles, _ := cr.SearchArticles(query)
-	externalArticles := pkg.CrawlerTx(query)
+	// 本地数据库查询协程
+	go func() {
+		var localArticles []model.Article
+		db := DB.Where("title LIKE ?", "%"+query+"%")
+		db.Offset((page - 1) * pageSize).Limit(pageSize).Find(&localArticles)
+		localCh <- localArticles
+	}()
+
+	// 外部爬虫协程
+	go func() {
+		externalArticles := pkg.CrawlerTx(query)
+		externalCh <- externalArticles
+	}()
+
+	var localArticles []model.Article
+	var externalArticles interface{}
+	for i := 0; i < 2; i++ {
+		select {
+		case l := <-localCh:
+			localArticles = l
+		case e := <-externalCh:
+			externalArticles = e
+		}
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"msg":      "查询成功",

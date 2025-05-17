@@ -7,6 +7,8 @@ import (
 	"sync"
 )
 
+var Token string = "sk-340a96bc42f74a98b33b4bfe49953387"
+
 type AIConfig struct {
 	APIKey      string
 	APIBaseURL  string

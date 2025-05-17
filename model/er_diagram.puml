@@ -1,0 +1,131 @@
+@startuml
+' 自动生成的E-R图
+' 实体定义
+entity "User" as User {
+  +ID : uint
+}
+
+entity "Article" as Article {
+  +ID : uint
+  UserID : uint
+  CategoryID : uint
+}
+
+entity "Category" as Category {
+  +ID : uint
+}
+
+entity "Tag" as Tag {
+  +ID : uint
+}
+
+entity "Comment" as Comment {
+  +ID : uint
+  ArticleID : uint
+  UserID : uint
+  ParentCommentID : uint
+  ParentUserID : uint
+}
+
+entity "Favorite" as Favorite {
+  +ID : uint
+  UserID : uint
+  ArticleID : uint
+}
+
+entity "Like" as Like {
+  +ID : uint
+  UserID : uint
+  ArticleID : uint
+}
+
+entity "ArticleTag" as ArticleTag {
+  ArticleID : uint
+  TagID : uint
+}
+
+entity "AIConversation" as AIConversation {
+  +ID : uint
+  UserID : uint
+}
+
+entity "GroupN" as GroupN {
+  +ID : uint
+  CreatorID : uint
+}
+
+entity "Post" as Post {
+  +ID : uint
+  GroupID : uint
+  UserID : uint
+}
+
+entity "UserGroup" as UserGroup {
+  UserID : uint
+  GroupID : uint
+}
+
+entity "GroupComment" as GroupComment {
+  +ID : uint
+  UserID : uint
+  PostID : uint
+  ParentID : uint
+}
+
+entity "Image" as Image {
+  +ID : uint
+  UserID : uint
+  PostID : uint
+  CommentID : uint
+}
+
+entity "GroupLike" as GroupLike {
+  +ID : uint
+  UserID : uint
+  PostID : uint
+  CommentID : uint
+}
+
+entity "SearchHistory" as SearchHistory {
+  +ID : uint
+  UserID : uint
+}
+
+entity "ReadingHistory" as ReadingHistory {
+  +ID : uint
+  UserID : uint
+  ArticleID : uint
+}
+
+entity "Traffic" as Traffic {
+  +ID : uint
+}
+
+' 关系定义
+User ||--o{ Article : "writes"
+User ||--o{ Comment : "comments"
+User ||--o{ Favorite : "favorites"
+User ||--o{ Like : "likes"
+User ||--o{ AIConversation : "ai conversations"
+User ||--o{ UserGroup : "groups"
+User ||--o{ GroupN : "creates"
+User ||--o{ GroupComment : "group comments"
+User ||--o{ Image : "uploads"
+User ||--o{ SearchHistory : "searches"
+User ||--o{ ReadingHistory : "reads"
+Article ||--o{ Comment : "has"
+Article ||--o{ Favorite : "favorited by"
+Article ||--o{ Like : "liked by"
+Article ||--o{ ArticleTag : "tagged"
+ArticleTag }o--|| Tag : "tags"
+Article }o--|| Category : "belongs"
+Comment ||--o{ Comment : "replies"
+GroupN ||--o{ Post : "has posts"
+GroupN ||--o{ UserGroup : "members"
+GroupN ||--o{ GroupComment : "comments"
+GroupN ||--o{ GroupLike : "likes"
+Post ||--o{ GroupComment : "comments"
+Post ||--o{ GroupLike : "likes"
+Post ||--o{ Image : "images"
+GroupComment ||--o{ Image : "images"
+@enduml

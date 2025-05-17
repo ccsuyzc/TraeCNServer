@@ -65,14 +65,14 @@ type User struct {
 	SubmitCount    uint `gorm:"default:0"` // 总提交次数
 	AcceptCount    uint `gorm:"default:0"` // 通过次数
 	// 关联关系
-	Articles        []Article         `gorm:"foreignKey:UserID"`
-	Comments        []Comment         `gorm:"foreignKey:UserID"`
-	Likes           []Like            `gorm:"foreignKey:UserID"`
-	Favorites       []Favorite        `gorm:"foreignKey:UserID"`
-	AIConversations []AIConversation  `gorm:"foreignKey:UserID"`
-	AIUsage         AIUsageStatistics `gorm:"foreignKey:UserID"`
-	Followers       []User            `gorm:"many2many:user_follows;foreignKey:ID;joinForeignKey:FollowedID;joinReferences:FollowerID"`
-	Following       []User            `gorm:"many2many:user_follows;foreignKey:ID;joinForeignKey:FollowerID;joinReferences:FollowedID"`
+	Articles        []Article         `gorm:"foreignKey:UserID"`   // 文章
+	Comments        []Comment         `gorm:"foreignKey:UserID"`    // 评论
+	Likes           []Like            `gorm:"foreignKey:UserID"`    // 点赞
+	Favorites       []Favorite        `gorm:"foreignKey:UserID"`    // 收藏
+	AIConversations []AIConversation  `gorm:"foreignKey:UserID"`    // AI对话
+	// AIUsage         AIUsageStatistics `gorm:"foreignKey:UserID"`    // AI使用统计 第一次尝试，先废弃。
+	Followers       []User            `gorm:"many2many:user_follows;foreignKey:ID;joinForeignKey:FollowedID;joinReferences:FollowerID"` // 粉丝
+	Following       []User            `gorm:"many2many:user_follows;foreignKey:ID;joinForeignKey:FollowerID;joinReferences:FollowedID"` // 关注
 }
 
 // 文章表 - 存储博客文章内容
@@ -105,11 +105,12 @@ type Article struct {
 	IsPost       bool      `gorm:"default:false"`            // 是否是帖子
 	PostType     string    `gorm:"size:20;default:'normal'"` // 帖子类型
 	ViewCount    int       `gorm:"default:0"`                // 浏览量
+	FavoriteCount int       `gorm:"default:0"`                // 收藏数 
 	LikeCount    int       `gorm:"default:0"`                // 点赞数
 	CommentCount int       `gorm:"default:0"`                // 评论数
 	ShareCount   int       `gorm:"default:0"`                // 分享数
 	IsDraft      bool      `gorm:"-"`                        // 虚拟字段用于查询
-	GroupID      *uint     `gorm:"index"`                    // 所属圈子ID（指针类型允许nil）
+	// GroupID      *uint     `gorm:"index"`                    // 所属圈子ID（指针类型允许nil）
 	PostVisible  string    `gorm:"size:20"`                  // 可见性：public/group/members
 	PinPosition  int       // 置顶位置
 
@@ -131,7 +132,7 @@ type Article struct {
 	Problem    Problem `gorm:"foreignKey:ProblemID"` // 关联题目
 	IsSolution bool    `gorm:"default:false"`        // 是否是题解
 
-	Group     Group      `gorm:"foreignKey:GroupID"` // 所属圈子（关联关系）
+	// Group     Group      `gorm:"foreignKey:GroupID"` // 所属圈子（关联关系）
 	User      User       `gorm:"foreignKey:UserID"`
 	Category  Category   `gorm:"foreignKey:CategoryID"`
 	Tags      []Tag      `gorm:"many2many:article_tags;"`
@@ -225,37 +226,7 @@ type Favorite struct {
 
 
 
-// 群组表 - 存储用户创建的群组
-type Group struct {
-	gorm.Model
-	Name          string `gorm:"size:100;not null;uniqueIndex"` // 圈子名称（唯一）
-	Description   string `gorm:"type:text;not null"`            // 圈子描述
-	CreatorID     uint   `gorm:"index;not null"`                // 创建者ID
-	AvatarURL     string `gorm:"size:255"`                      // 圈子头像
-	MemberCount   uint   `gorm:"default:0"`                     // 成员数量
-	PostCount     uint   `gorm:"default:0"`                     // 帖子数量
-	IsPublic      bool   `gorm:"default:true"`                  // 是否公开
-	AuditRequired bool   `gorm:"default:false"`                 // 发帖是否需要审核
 
-	// 关联关系
-	Creator User      `gorm:"foreignKey:CreatorID"`
-	Members []User    `gorm:"many2many:user_groups;"`
-	Posts   []Article `gorm:"foreignKey:GroupID"`
-}
-
-// 用户群组中间表 - 用户和群组的多对多关系映射
-type UserGroup struct {
-	UserID   uint      `gorm:"primaryKey;autoIncrement:false"`
-	GroupID  uint      `gorm:"primaryKey;autoIncrement:false"`
-	JoinedAt time.Time // 加入时间
-	Role     string    `gorm:"size:20;default:'member'"` // 角色：member/admin
-
-	CanPost   bool `gorm:"default:true"`  // 是否允许发帖
-	CanManage bool `gorm:"default:false"` // 是否允许管理
-
-	User  User  `gorm:"foreignKey:UserID"`
-	Group Group `gorm:"foreignKey:GroupID"`
-}
 
 // 用户关注关系表
 type UserFollow struct {
@@ -364,16 +335,16 @@ func (l *Like) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
-// UserGroup的创建/删除钩子
-func (ug *UserGroup) AfterCreate(tx *gorm.DB) error {
-	return tx.Model(&Group{}).Where("id = ?", ug.GroupID).
-		Update("member_count", gorm.Expr("member_count + 1")).Error
-}
+// // UserGroup的创建/删除钩子
+// func (ug *UserGroup) AfterCreate(tx *gorm.DB) error {
+// 	return tx.Model(&Group{}).Where("id = ?", ug.GroupID).
+// 		Update("member_count", gorm.Expr("member_count + 1")).Error
+// }
 
-func (ug *UserGroup) AfterDelete(tx *gorm.DB) error {
-	return tx.Model(&Group{}).Where("id = ?", ug.GroupID).
-		Update("member_count", gorm.Expr("GREATEST(member_count - 1, 0)")).Error
-}
+// func (ug *UserGroup) AfterDelete(tx *gorm.DB) error {
+// 	return tx.Model(&Group{}).Where("id = ?", ug.GroupID).
+// 		Update("member_count", gorm.Expr("GREATEST(member_count - 1, 0)")).Error
+// }
 
 // UserFollow的创建/删除钩子
 func (uf *UserFollow) AfterCreate(tx *gorm.DB) error {
@@ -412,22 +383,22 @@ func UnfollowY(db *gorm.DB, userID1, userID2 uint) error {
 	return db.Where("follower_id = ? AND followed_id = ?", userID1, userID2).Delete(&UserFollow{}).Error
 }
 
-// Article的创建/删除钩子
-func (a *Article) AfterCreate(tx *gorm.DB) error {
-	if a.GroupID != nil {
-		return tx.Model(&Group{}).Where("id = ?", *a.GroupID).
-			Update("post_count", gorm.Expr("post_count + 1")).Error
-	}
-	return nil
-}
+// // Article的创建/删除钩子
+// func (a *Article) AfterCreate(tx *gorm.DB) error {
+// 	if a.GroupID != nil {
+// 		return tx.Model(&Group{}).Where("id = ?", *a.GroupID).
+// 			Update("post_count", gorm.Expr("post_count + 1")).Error
+// 	}
+// 	return nil
+// }
 
-func (a *Article) AfterDelete(tx *gorm.DB) error {
-	if a.GroupID != nil {
-		return tx.Model(&Group{}).Where("id = ?", *a.GroupID).
-			Update("post_count", gorm.Expr("GREATEST(post_count - 1, 0)")).Error
-	}
-	return nil
-}
+// func (a *Article) AfterDelete(tx *gorm.DB) error {
+// 	if a.GroupID != nil {
+// 		return tx.Model(&Group{}).Where("id = ?", *a.GroupID).
+// 			Update("post_count", gorm.Expr("GREATEST(post_count - 1, 0)")).Error
+// 	}
+// 	return nil
+// }
 
 // 文章审核钩子函数
 func (a *Article) BeforeUpdate(tx *gorm.DB) error {
@@ -490,11 +461,11 @@ func AutoMigrate(db *gorm.DB) error {
 		&Comment{},           // 评论表
 		&Like{},              // 点赞表
 		&Favorite{},          // 收藏表
-		&AIConversation{},    // AI对话表
-		&AIUsageStatistics{}, // AI使用统计表
+	
+		// &AIUsageStatistics{}, // AI使用统计表 第一次尝试的，先废弃
 		&ArticleTag{},        // 文章标签中间表
-		&Group{},             // 群组表
-		&UserGroup{},         // 用户群组中间表
+		// &Group{},             // 群组表
+		// &UserGroup{},         // 用户群组中间表
 		&AdminLog{},          // 管理员日志表
 		&GroupApply{},        // 圈子申请表
 
@@ -509,6 +480,25 @@ func AutoMigrate(db *gorm.DB) error {
 
 		&SearchHistory{},  // 搜索历史表
 		&ReadingHistory{}, // 阅读历史表
+
+		&AIConversation{}, // Deepseek AI对话表 第一次尝试，废弃了的，目前用来保留流式的
+
+		&ChatSession{}, // Deepseek AI对话会话表第二次尝试 非流式的转发
+		&ChatMessage{},
+       
+
+		// 贴吧
+		&GroupN{},   // 圈子
+		&UserGroup{}, // 用户圈子中间表
+		&Post{},      // 圈子帖子
+		&GroupComment{}, // 圈子评论
+		&GroupLike{},    // 圈子点赞表
+
+		// 流量记录中间件的表Traffic
+		&Traffic{},
+
+		// ai模型记录表
+		&AIModelConfig{},
 	)
 }
 
